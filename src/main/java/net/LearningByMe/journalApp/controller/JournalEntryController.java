@@ -1,43 +1,79 @@
 package net.LearningByMe.journalApp.controller;
 
 import net.LearningByMe.journalApp.entity.JournalEntity;
+import net.LearningByMe.journalApp.entity.User;
+import net.LearningByMe.journalApp.service.JournalEntryService;
+import net.LearningByMe.journalApp.service.UserService;
+import org.bson.types.ObjectId;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import java.time.LocalDateTime;
+import java.util.*;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+
 
 @RestController
 @RequestMapping("/journal")
 public class JournalEntryController {
 
-    private Map<Long, JournalEntity> journalEntries = new HashMap<>();
+    @Autowired
+    private JournalEntryService journalEntryService;
+    private UserService userService;
 
-    @GetMapping
-    public List<JournalEntity> getAll(){
-        return new ArrayList<>(journalEntries.values());
+    @GetMapping("{userName}")
+    public ResponseEntity<?> getAllJournalEntriesOfUser(@PathVariable String userName){
+
+        User user = userService.findByUserName(userName);
+        List<JournalEntity> all = user.getJournalEntries();
+        if(all != null && !all.isEmpty()){
+            return new ResponseEntity<>(all, HttpStatus.OK);
+        }
+
+        return new ResponseEntity<>(HttpStatus.NOT_FOUND);
     }
 
-    @PostMapping
-    public boolean createEntry(@RequestBody JournalEntity myEntry){
-        journalEntries.put(myEntry.getId(), myEntry);
-        return true;
+    @PostMapping("{userName}")
+    public ResponseEntity<JournalEntity> createEntry(@RequestBody JournalEntity myEntry, @PathVariable String userName){
+       try {
+           journalEntryService.saveEntry(myEntry, userName);
+           return new ResponseEntity<>(myEntry,HttpStatus.CREATED);
+       } catch (Exception e){
+           return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+       }
     }
 
-    @GetMapping("id/{myId}")
-    public JournalEntity getJournalEntryById(@PathVariable long myId){
-        return journalEntries.get(myId);
+    @GetMapping("/id/{myId}")
+    public ResponseEntity<?> getJournalEntryById(@PathVariable ObjectId myId){
+
+        Optional<JournalEntity> journalEntity = journalEntryService.findById(myId);
+
+        if(journalEntity.isPresent()){
+            return new ResponseEntity<>(journalEntity.get(), HttpStatus.OK);
+        }
+
+        return new ResponseEntity<>(HttpStatus.NOT_FOUND);
     }
 
-    @DeleteMapping("id/{myId}")
-    public boolean deleteJournalEntryById(@PathVariable long myId){
-        journalEntries.remove(myId);
-        return true;
-    }
+@DeleteMapping("/id/{userName}/{myId}")
+public ResponseEntity<?> deleteJournalEntryById(@PathVariable ObjectId myId, @PathVariable String userName){
+//    User user = userService.findByUserName(userName);
+    journalEntryService.deleteById(myId, userName);
+    return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+}
 
-    @PutMapping("id/{myId}")
-    public JournalEntity updateJournalEntityById(@PathVariable long myId, @RequestBody JournalEntity myEntry){
-        return  journalEntries.put(myId, myEntry);
+   @PutMapping("/id/{userName}/{myId}")
+    public ResponseEntity<?> updateJournalEntry(@PathVariable ObjectId myId,
+                                                @RequestBody JournalEntity newEntry,
+                                                @PathVariable String userName){
+        JournalEntity old = journalEntryService.findById(myId).orElse(null);
+        if(old != null){
+            old.setTitle(newEntry.getTitle() != null && !newEntry.equals("")?newEntry.getTitle(): old.getTitle());
+            old.setContent(newEntry.getContent() != null && !newEntry.getContent().equals("")? newEntry.getContent() : old.getContent());
+            journalEntryService.saveEntry(old);
+            return new ResponseEntity<>(old, HttpStatus.OK);
+        }
+        return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
     }
 }
